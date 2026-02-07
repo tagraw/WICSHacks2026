@@ -8,6 +8,7 @@ import os
 # Assuming these are in the same directory for simplicity
 from ml_service import MLService
 from serp_service import SerpService
+from navigation_service import NavigationService
 
 app = FastAPI(title="ACL 2026 Safety API", version="1.0.0")
 
@@ -32,6 +33,7 @@ app.add_middleware(
 # Initialize Services
 ml_service = MLService()
 serp_service = SerpService()
+nav_service = NavigationService()
 
 # --- Pydantic Models ---
 class LocationPing(BaseModel):
@@ -43,8 +45,11 @@ class LocationPing(BaseModel):
 class RouteRequest(BaseModel):
     start_lat: float
     start_lng: float
-    end_lat: float
-    end_lng: float
+    end_lat: Optional[float] = None
+    end_lng: Optional[float] = None
+    prefer_wheelchair: bool = False
+    avoid_crowds: bool = False
+    closest_exit: bool = False
 
 class SOSAlert(BaseModel):
     lat: float
@@ -82,14 +87,26 @@ async def get_heatmap():
     data = ml_service.generate_heatmap_data()
     return data # Returns list of {lat, lng, weight}
 
+@app.get("/markers")
+async def get_markers():
+    """
+    Returns accessibility landmarks (Medical, Exits, etc.)
+    """
+    return nav_service.get_markers()
+
 @app.post("/safe-route")
 async def get_safe_route(route_req: RouteRequest):
     """
-    Calculates a safe route avoiding high-risk zones.
+    Calculates a safe/accessible route based on preferences.
     """
-    route = ml_service.get_safe_route(
-        route_req.start_lat, route_req.start_lng,
-        route_req.end_lat, route_req.end_lng
+    route = nav_service.calculate_route(
+        start_lat=route_req.start_lat,
+        start_lng=route_req.start_lng,
+        end_lat=route_req.end_lat,
+        end_lng=route_req.end_lng,
+        wheelchair=route_req.prefer_wheelchair,
+        avoid_crowds=route_req.avoid_crowds,
+        closest_exit=route_req.closest_exit
     )
     return {"route": route}
 
